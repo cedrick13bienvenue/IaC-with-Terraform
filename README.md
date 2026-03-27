@@ -124,6 +124,9 @@ bash setup-backend.sh
 
 Creates the S3 bucket (with versioning + public access blocked) and DynamoDB lock table. This solves the chicken-and-egg problem — Terraform needs the backend to exist before it can store state there.
 
+![S3 Bucket Versioning Enabled](screenshoots/01-s3-bucket-versioning-enabled.png)
+![DynamoDB Lock Table](screenshoots/02-dynamodb-lock-table.png)
+
 ### 1. Initialize
 
 ```bash
@@ -131,6 +134,8 @@ terraform init
 ```
 
 Downloads the AWS provider and connects to the S3 remote backend.
+
+![Terraform Init](screenshoots/03-terraform-init.png)
 
 ### 2. Format & Validate
 
@@ -142,6 +147,8 @@ terraform validate
 `fmt` enforces HashiCorp's official style guide — auto-aligns and formats all `.tf` files.
 `validate` checks the configuration for syntax errors and internal consistency without connecting to AWS.
 
+![Terraform Validate](screenshoots/09-terraform-validate.png)
+
 ### 3. Plan (dry run)
 
 ```bash
@@ -149,6 +156,8 @@ terraform plan -var="my_ip=YOUR.IP.HERE/32"
 ```
 
 Previews all resources that will be created. No changes are made.
+
+![Terraform Plan](screenshoots/04-terraform-plan.png)
 
 ### 4. Apply
 
@@ -158,6 +167,10 @@ terraform apply -var="my_ip=YOUR.IP.HERE/32"
 
 Creates all infrastructure. Type `yes` to confirm.
 
+![Terraform Apply Complete](screenshoots/05-terraform-apply-complete.png)
+![EC2 Instance Running](screenshoots/06-ec2-instance-running.png)
+![S3 State File](screenshoots/07-s3-state-file.png)
+
 ### 5. Destroy
 
 ```bash
@@ -165,6 +178,8 @@ terraform destroy -var="my_ip=YOUR.IP.HERE/32"
 ```
 
 Tears down all created resources. Type `yes` to confirm.
+
+![Terraform Destroy Complete](screenshoots/08-terraform-destroy-complete.png)
 
 ### 6. Destroy Backend (run after terraform destroy)
 
@@ -206,31 +221,3 @@ During apply, the initial `t2.micro` instance type was rejected by AWS with:
 
 ---
 
-## Screenshots
-
-### 01 — S3 Bucket with Versioning Enabled
-![S3 Bucket](screenshoots/01-s3-bucket-versioning-enabled.png)
-
-### 02 — DynamoDB Lock Table
-![DynamoDB](screenshoots/02-dynamodb-lock-table.png)
-
-### 03 — Terraform Init
-![Terraform Init](screenshoots/03-terraform-init.png)
-
-### 04 — Terraform Plan
-![Terraform Plan](screenshoots/04-terraform-plan.png)
-
-### 05 — Terraform Apply Complete
-![Terraform Apply](screenshoots/05-terraform-apply-complete.png)
-
-### 06 — EC2 Instance Running (AWS Console)
-![EC2 Running](screenshoots/06-ec2-instance-running.png)
-
-### 07 — S3 State File (Remote Backend Proof)
-![S3 State File](screenshoots/07-s3-state-file.png)
-
-### 08 — Terraform Destroy Complete
-![Terraform Destroy](screenshoots/08-terraform-destroy-complete.png)
-
-### 09 — Terraform Format & Validate
-![Terraform Validate](screenshoots/09-terraform-validate.png)
