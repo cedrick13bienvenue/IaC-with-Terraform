@@ -37,28 +37,39 @@ fi
 echo ""
 echo "[1/3] Removing all object versions from S3 bucket..."
 
-aws s3api list-object-versions \
+# Fetch all versions as JSON and delete each one individually
+VERSIONS=$(aws s3api list-object-versions \
   --bucket "$BUCKET_NAME" \
-  --query 'Versions[].{Key:Key,VersionId:VersionId}' \
-  --output text 2>/dev/null | \
-while read KEY VERSION; do
-  aws s3api delete-object \
-    --bucket "$BUCKET_NAME" \
-    --key "$KEY" \
-    --version-id "$VERSION" > /dev/null
-done
+  --query 'Versions[].[Key,VersionId]' \
+  --output json 2>/dev/null)
+
+if [ "$VERSIONS" != "null" ] && [ -n "$VERSIONS" ]; then
+  echo "$VERSIONS" | python3 -c "
+import json, sys, subprocess
+items = json.load(sys.stdin)
+for key, vid in items:
+    subprocess.run(['aws', 's3api', 'delete-object',
+        '--bucket', '$BUCKET_NAME', '--key', key, '--version-id', vid],
+        stdout=subprocess.DEVNULL)
+"
+fi
 
 # Also remove delete markers
-aws s3api list-object-versions \
+MARKERS=$(aws s3api list-object-versions \
   --bucket "$BUCKET_NAME" \
-  --query 'DeleteMarkers[].{Key:Key,VersionId:VersionId}' \
-  --output text 2>/dev/null | \
-while read KEY VERSION; do
-  aws s3api delete-object \
-    --bucket "$BUCKET_NAME" \
-    --key "$KEY" \
-    --version-id "$VERSION" > /dev/null
-done
+  --query 'DeleteMarkers[].[Key,VersionId]' \
+  --output json 2>/dev/null)
+
+if [ "$MARKERS" != "null" ] && [ -n "$MARKERS" ]; then
+  echo "$MARKERS" | python3 -c "
+import json, sys, subprocess
+items = json.load(sys.stdin)
+for key, vid in items:
+    subprocess.run(['aws', 's3api', 'delete-object',
+        '--bucket', '$BUCKET_NAME', '--key', key, '--version-id', vid],
+        stdout=subprocess.DEVNULL)
+"
+fi
 
 echo "      ✓ All versions removed"
 
