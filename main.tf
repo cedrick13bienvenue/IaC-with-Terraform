@@ -20,8 +20,8 @@ terraform {
     bucket         = "cedrick-terraform-state-2026" # S3 bucket storing the state file
     key            = "iac-lab/terraform.tfstate"    # path/filename inside the bucket
     region         = "eu-north-1"
-    dynamodb_table = "terraform-lock"               # DynamoDB table for state locking
-    encrypt        = true                           # encrypt state file at rest
+    dynamodb_table = "terraform-lock" # DynamoDB table for state locking
+    encrypt        = true             # encrypt state file at rest
   }
 }
 
