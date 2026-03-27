@@ -156,7 +156,7 @@ Tears down all created resources. Type `yes` to confirm.
 bash destroy-backend.sh
 ```
 
-Empties and deletes the S3 bucket and DynamoDB table. Prompts for confirmation before deleting anything.
+Empties and deletes the S3 bucket and DynamoDB table. Prompts for confirmation before deleting anything. Ensures no AWS resources are left running after the lab, for cost optimization.
 
 ## Security Considerations
 
