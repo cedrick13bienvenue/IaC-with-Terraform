@@ -12,7 +12,7 @@ This lab demonstrates how to use **Terraform** to define, deploy, and destroy fo
 - Define AWS infrastructure as code using `.tf` files
 - Deploy: VPC, public subnet, Internet Gateway, Route Table, Security Group, and EC2
 - Configure a remote backend: S3 bucket (state storage) + DynamoDB table (state locking)
-- Run the full Terraform lifecycle: `init` → `plan` → `apply` → `destroy`
+- Run the full Terraform lifecycle: `init` → `validate` → `fmt` → `plan` → `apply` → `destroy`
 
 ---
 
@@ -44,7 +44,8 @@ IaC-with-Terraform/
     ├── 05-terraform-apply-complete.png
     ├── 06-ec2-instance-running.png
     ├── 07-s3-state-file.png
-    └── 08-terraform-destroy-complete.png
+    ├── 08-terraform-destroy-complete.png
+    └── 09-terraform-validate.png
 ```
 
 ---
@@ -123,7 +124,17 @@ terraform init
 
 Downloads the AWS provider and connects to the S3 remote backend.
 
-### 2. Plan (dry run)
+### 2. Format & Validate
+
+```bash
+terraform fmt
+terraform validate
+```
+
+`fmt` enforces HashiCorp's official style guide — auto-aligns and formats all `.tf` files.
+`validate` checks the configuration for syntax errors and internal consistency without connecting to AWS.
+
+### 3. Plan (dry run)
 
 ```bash
 terraform plan -var="my_ip=YOUR.IP.HERE/32"
@@ -131,7 +142,7 @@ terraform plan -var="my_ip=YOUR.IP.HERE/32"
 
 Previews all resources that will be created. No changes are made.
 
-### 3. Apply
+### 4. Apply
 
 ```bash
 terraform apply -var="my_ip=YOUR.IP.HERE/32"
@@ -139,13 +150,33 @@ terraform apply -var="my_ip=YOUR.IP.HERE/32"
 
 Creates all infrastructure. Type `yes` to confirm.
 
-### 4. Destroy
+### 5. Destroy
 
 ```bash
 terraform destroy -var="my_ip=YOUR.IP.HERE/32"
 ```
 
 Tears down all created resources. Type `yes` to confirm.
+
+---
+
+## Cost Optimization
+
+- **t3.micro** was chosen over t2.micro — `eu-north-1` (Stockholm) uses the Nitro hypervisor generation where t3.micro is the free tier eligible instance, not t2.micro
+- `terraform destroy` is run immediately after verification — no resources left running to incur charges
+- S3 state storage and DynamoDB lock table have negligible cost (well within free tier limits)
+- Amazon Linux 2 is used instead of paid AMIs — zero licensing cost
+
+---
+
+## Problem Solving
+
+During apply, the initial `t2.micro` instance type was rejected by AWS with:
+> `InvalidParameterCombination: The specified instance type is not eligible for Free Tier`
+
+**Root cause:** `eu-north-1` is a newer region that runs on Nitro hardware. Free tier in this region uses `t3.micro`, not `t2.micro`.
+
+**Fix:** Updated `instance_type` default in `variables.tf` from `t2.micro` to `t3.micro`. All other resources (VPC, subnet, IGW, security group) had already been created successfully and were not recreated — Terraform's state tracking handled this correctly.
 
 ---
 
@@ -184,3 +215,6 @@ Tears down all created resources. Type `yes` to confirm.
 
 ### 08 — Terraform Destroy Complete
 ![Terraform Destroy](screenshoots/08-terraform-destroy-complete.png)
+
+### 09 — Terraform Format & Validate
+![Terraform Validate](screenshoots/09-terraform-validate.png)
