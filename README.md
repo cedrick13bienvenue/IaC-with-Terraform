@@ -50,37 +50,6 @@ IaC-with-Terraform/
     └── 09-terraform-validate.png
 ```
 
----
-
-## Infrastructure Diagram
-
-```
-                        ┌─────────────────────────────────┐
-                        │           AWS VPC                │
-                        │         10.0.0.0/16              │
-                        │                                  │
-                        │   ┌──────────────────────────┐   │
-                        │   │      Public Subnet        │   │
-                        │   │       10.0.1.0/24         │   │
-                        │   │                           │   │
-                        │   │  ┌────────────────────┐   │   │
-                        │   │  │   EC2 (t3.micro)   │   │   │
-                        │   │  │   Amazon Linux 2   │   │   │
-                        │   │  │   SG: 22 (my IP)   │   │   │
-                        │   │  │   SG: 80 (0.0.0.0) │   │   │
-                        │   │  └────────────────────┘   │   │
-                        │   └──────────────────────────┘   │
-                        │              │                    │
-                        │   ┌──────────▼───────────┐        │
-                        │   │  Internet Gateway    │        │
-                        │   └──────────────────────┘        │
-                        └─────────────────────────────────┘
-                                       │
-                                   Internet
-```
-
----
-
 ## Resources Deployed
 
 | Resource         | Name                  | Details                              |
@@ -188,28 +157,6 @@ bash destroy-backend.sh
 ```
 
 Empties and deletes the S3 bucket and DynamoDB table. Prompts for confirmation before deleting anything.
-
----
-
-## Cost Optimization
-
-- **t3.micro** was chosen over t2.micro — `eu-north-1` (Stockholm) uses the Nitro hypervisor generation where t3.micro is the free tier eligible instance, not t2.micro
-- `terraform destroy` is run immediately after verification — no application resources left running to incur charges
-- Amazon Linux 2 is used instead of paid AMIs — zero licensing cost
-- **S3 bucket and DynamoDB table are fully scripted** — `setup-backend.sh` creates them before the lab, `destroy-backend.sh` tears them down after. Zero manual steps, zero resources left running after the lab is complete.
-
----
-
-## Problem Solving
-
-During apply, the initial `t2.micro` instance type was rejected by AWS with:
-> `InvalidParameterCombination: The specified instance type is not eligible for Free Tier`
-
-**Root cause:** `eu-north-1` is a newer region that runs on Nitro hardware. Free tier in this region uses `t3.micro`, not `t2.micro`.
-
-**Fix:** Updated `instance_type` default in `variables.tf` from `t2.micro` to `t3.micro`. All other resources (VPC, subnet, IGW, security group) had already been created successfully and were not recreated — Terraform's state tracking handled this correctly.
-
----
 
 ## Security Considerations
 
