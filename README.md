@@ -31,12 +31,14 @@ This lab demonstrates how to use **Terraform** to define, deploy, and destroy fo
 
 ```
 IaC-with-Terraform/
-├── main.tf           # Core infrastructure + remote backend config
-├── variables.tf      # Input variable definitions
-├── outputs.tf        # Output values printed after apply
-├── .gitignore        # Excludes state files and local Terraform dirs
-├── README.md         # This file
-└── screenshoots/     # Evidence screenshots
+├── main.tf              # Core infrastructure + remote backend config
+├── variables.tf         # Input variable definitions
+├── outputs.tf           # Output values printed after apply
+├── setup-backend.sh     # Creates S3 bucket + DynamoDB table before terraform init
+├── destroy-backend.sh   # Deletes S3 bucket + DynamoDB table after terraform destroy
+├── .gitignore           # Excludes state files and local Terraform dirs
+├── README.md            # This file
+└── screenshoots/        # Evidence screenshots
     ├── 01-s3-bucket-versioning-enabled.png
     ├── 02-dynamodb-lock-table.png
     ├── 03-terraform-init.png
@@ -109,12 +111,18 @@ State file path in S3: `iac-lab/terraform.tfstate`
 
 1. **Terraform** >= 1.5.0 installed
 2. **AWS CLI** configured with valid credentials (`aws configure`)
-3. S3 bucket created manually with versioning enabled
-4. DynamoDB table created manually with `LockID` as partition key
 
 ---
 
 ## Usage
+
+### 0. Setup Backend (run once before anything else)
+
+```bash
+bash setup-backend.sh
+```
+
+Creates the S3 bucket (with versioning + public access blocked) and DynamoDB lock table. This solves the chicken-and-egg problem — Terraform needs the backend to exist before it can store state there.
 
 ### 1. Initialize
 
@@ -158,14 +166,22 @@ terraform destroy -var="my_ip=YOUR.IP.HERE/32"
 
 Tears down all created resources. Type `yes` to confirm.
 
+### 6. Destroy Backend (run after terraform destroy)
+
+```bash
+bash destroy-backend.sh
+```
+
+Empties and deletes the S3 bucket and DynamoDB table. Prompts for confirmation before deleting anything.
+
 ---
 
 ## Cost Optimization
 
 - **t3.micro** was chosen over t2.micro — `eu-north-1` (Stockholm) uses the Nitro hypervisor generation where t3.micro is the free tier eligible instance, not t2.micro
-- `terraform destroy` is run immediately after verification — no resources left running to incur charges
-- S3 state storage and DynamoDB lock table have negligible cost (well within free tier limits)
+- `terraform destroy` is run immediately after verification — no application resources left running to incur charges
 - Amazon Linux 2 is used instead of paid AMIs — zero licensing cost
+- **S3 bucket and DynamoDB table are fully scripted** — `setup-backend.sh` creates them before the lab, `destroy-backend.sh` tears them down after. Zero manual steps, zero resources left running after the lab is complete.
 
 ---
 
