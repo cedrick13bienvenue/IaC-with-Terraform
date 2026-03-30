@@ -1,11 +1,4 @@
-# ──────────────────────────────────────────────
-# TERRAFORM SETTINGS & REMOTE BACKEND
-# ──────────────────────────────────────────────
-# The backend block tells Terraform to store its
-# state file in S3 instead of locally. DynamoDB
-# provides locking so two people can't apply
-# changes at the same time (prevents corruption).
-# ──────────────────────────────────────────────
+# Remote backend: state stored in S3, locked via DynamoDB
 terraform {
   required_version = ">= 1.5.0"
 
@@ -17,34 +10,22 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "cedrick-terraform-state-2026" # S3 bucket storing the state file
-    key            = "iac-lab/terraform.tfstate"    # path/filename inside the bucket
+    bucket         = "cedrick-terraform-state-2026"
+    key            = "iac-lab/terraform.tfstate"
     region         = "eu-north-1"
-    dynamodb_table = "terraform-lock" # DynamoDB table for state locking
-    encrypt        = true             # encrypt state file at rest
+    dynamodb_table = "terraform-lock"
+    encrypt        = true
   }
 }
 
-# ──────────────────────────────────────────────
-# PROVIDER
-# ──────────────────────────────────────────────
-# Tells Terraform to use the AWS provider and
-# which region to deploy resources into.
-# ──────────────────────────────────────────────
 provider "aws" {
   region = var.aws_region
 }
 
-# ──────────────────────────────────────────────
-# VPC
-# ──────────────────────────────────────────────
-# A Virtual Private Cloud is your own isolated
-# network within AWS. All resources live inside it.
-# 10.0.0.0/16 gives us 65,536 available IP addresses.
-# ──────────────────────────────────────────────
+# VPC — isolated network
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true # allows EC2 to get a public DNS name
+  enable_dns_hostnames = true
 
   tags = {
     Name    = "${var.project_name}-vpc"
@@ -52,19 +33,12 @@ resource "aws_vpc" "main" {
   }
 }
 
-# ──────────────────────────────────────────────
-# PUBLIC SUBNET
-# ──────────────────────────────────────────────
-# A subnet is a segment of the VPC's IP range.
-# "Public" means instances here can get a public
-# IP and reach the internet via the IGW.
-# 10.0.1.0/24 gives us 256 IPs within the VPC.
-# ──────────────────────────────────────────────
+# Public subnet — instances here get a public IP automatically
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
   availability_zone       = "${var.aws_region}a"
-  map_public_ip_on_launch = true # auto-assign public IP to any instance launched here
+  map_public_ip_on_launch = true
 
   tags = {
     Name    = "${var.project_name}-public-subnet"
@@ -72,16 +46,7 @@ resource "aws_subnet" "public" {
   }
 }
 
-# ──────────────────────────────────────────────
-# INTERNET GATEWAY
-# ──────────────────────────────────────────────
-# The IGW is the bridge between your VPC and the
-# public internet. Without it, nothing in your
-# VPC can send or receive internet traffic.
-# Per AWS provider v5.x docs, the VPC attachment
-# is managed as a separate resource for clearer
-# dependency tracking.
-# ──────────────────────────────────────────────
+# Internet Gateway — connects the VPC to the public internet
 resource "aws_internet_gateway" "igw" {
   tags = {
     Name    = "${var.project_name}-igw"
@@ -89,19 +54,13 @@ resource "aws_internet_gateway" "igw" {
   }
 }
 
+# Attach the IGW to the VPC (separate resource per AWS provider v5.x)
 resource "aws_internet_gateway_attachment" "igw" {
   internet_gateway_id = aws_internet_gateway.igw.id
   vpc_id              = aws_vpc.main.id
 }
 
-# ──────────────────────────────────────────────
-# ROUTE TABLE
-# ──────────────────────────────────────────────
-# A route table contains rules (routes) that
-# determine where network traffic is directed.
-# This rule says: all internet traffic (0.0.0.0/0)
-# should be sent through the Internet Gateway.
-# ──────────────────────────────────────────────
+# Route table — sends all internet traffic through the IGW
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -116,25 +75,13 @@ resource "aws_route_table" "public" {
   }
 }
 
-# Associate the route table with the public subnet
-# Without this, the subnet won't use the routes we defined above.
+# Link the route table to the public subnet
 resource "aws_route_table_association" "public" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
 }
 
-# ──────────────────────────────────────────────
-# SECURITY GROUP
-# ──────────────────────────────────────────────
-# A security group acts as a virtual firewall.
-# Per AWS provider v5.x docs, rules are defined
-# as separate resources using:
-#   aws_vpc_security_group_ingress_rule
-#   aws_vpc_security_group_egress_rule
-# instead of inline ingress/egress blocks.
-# ──────────────────────────────────────────────
-
-
+# Security group — virtual firewall for the EC2 instance
 resource "aws_security_group" "lab_sg" {
   name        = "${var.project_name}-sg"
   description = "Allow SSH from my IP only and HTTP from anywhere"
@@ -146,7 +93,7 @@ resource "aws_security_group" "lab_sg" {
   }
 }
 
-# SSH: only your IP can connect on port 22
+# Allow SSH from your IP only
 resource "aws_vpc_security_group_ingress_rule" "ssh" {
   security_group_id = aws_security_group.lab_sg.id
   description       = "SSH from my IP"
@@ -156,7 +103,7 @@ resource "aws_vpc_security_group_ingress_rule" "ssh" {
   cidr_ipv4         = var.my_ip
 }
 
-# HTTP: anyone can reach port 80 (web traffic)
+# Allow HTTP from anywhere
 resource "aws_vpc_security_group_ingress_rule" "http" {
   security_group_id = aws_security_group.lab_sg.id
   description       = "HTTP from anywhere"
@@ -166,7 +113,7 @@ resource "aws_vpc_security_group_ingress_rule" "http" {
   cidr_ipv4         = "0.0.0.0/0"
 }
 
-# Outbound: allow all traffic out (for updates, package installs, etc.)
+# Allow all outbound traffic
 resource "aws_vpc_security_group_egress_rule" "all_outbound" {
   security_group_id = aws_security_group.lab_sg.id
   description       = "Allow all outbound traffic"
@@ -174,14 +121,7 @@ resource "aws_vpc_security_group_egress_rule" "all_outbound" {
   cidr_ipv4         = "0.0.0.0/0"
 }
 
-# ──────────────────────────────────────────────
-# EC2 INSTANCE
-# ──────────────────────────────────────────────
-# The actual virtual server. t3.micro is free
-# tier eligible in eu-north-1 (750 hrs/month for 12 months).
-# It's placed in our public subnet and attached
-# to the security group we defined above.
-# ──────────────────────────────────────────────
+# EC2 instance — t3.micro, placed in the public subnet
 resource "aws_instance" "web" {
   ami                    = var.ami_id
   instance_type          = var.instance_type

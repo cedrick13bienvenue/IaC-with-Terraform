@@ -1,21 +1,13 @@
-# ──────────────────────────────────────────────
-# BACKEND BOOTSTRAP
-# ──────────────────────────────────────────────
-# This config creates the S3 bucket and DynamoDB
-# table used as the remote backend by the main
-# config. It uses local state intentionally —
-# you cannot use a remote backend to create the
-# remote backend itself.
+# Bootstraps the remote backend — uses local state intentionally.
+# Run this first before the main config.
 #
 # Workflow:
 #   1. cd backend && terraform init && terraform apply
 #   2. cd ..      && terraform init && terraform apply
 #
-# To destroy everything:
+# Teardown (reverse order):
 #   1. cd ..      && terraform destroy
 #   2. cd backend && terraform destroy
-# ──────────────────────────────────────────────
-
 
 terraform {
   required_version = ">= 1.5.0"
@@ -32,10 +24,7 @@ provider "aws" {
   region = var.aws_region
 }
 
-# ──────────────────────────────────────────────
-# S3 BUCKET — stores the Terraform state file
-# ──────────────────────────────────────────────
-
+# S3 bucket — stores the Terraform state file remotely
 resource "aws_s3_bucket" "state" {
   bucket        = var.bucket_name
   force_destroy = true # empties all versions before deleting on terraform destroy
@@ -46,8 +35,7 @@ resource "aws_s3_bucket" "state" {
   }
 }
 
-# Versioning — lets you recover a previous state file if the current one gets corrupted.
-
+# Keep a history of every state file version for recovery
 resource "aws_s3_bucket_versioning" "state" {
   bucket = aws_s3_bucket.state.id
 
@@ -56,8 +44,7 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
-# Block all public access — state files can contain
-# sensitive data (IPs, IDs) and must never be public.
+# Block all public access — state files contain sensitive data
 resource "aws_s3_bucket_public_access_block" "state" {
   bucket = aws_s3_bucket.state.id
 
@@ -67,13 +54,7 @@ resource "aws_s3_bucket_public_access_block" "state" {
   restrict_public_buckets = true
 }
 
-# ──────────────────────────────────────────────
-# DYNAMODB TABLE — state locking
-# ──────────────────────────────────────────────
-# Prevents two concurrent terraform apply runs
-# from corrupting the state file. LockID is the
-# exact key name required by Terraform's S3 backend.
-
+# DynamoDB table — prevents concurrent applies from corrupting state
 resource "aws_dynamodb_table" "lock" {
   name         = var.dynamodb_table
   billing_mode = "PAY_PER_REQUEST"
