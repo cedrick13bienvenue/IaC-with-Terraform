@@ -78,14 +78,20 @@ resource "aws_subnet" "public" {
 # The IGW is the bridge between your VPC and the
 # public internet. Without it, nothing in your
 # VPC can send or receive internet traffic.
+# Per AWS provider v5.x docs, the VPC attachment
+# is managed as a separate resource for clearer
+# dependency tracking.
 # ──────────────────────────────────────────────
 resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.main.id
-
   tags = {
     Name    = "${var.project_name}-igw"
     Project = var.project_name
   }
+}
+
+resource "aws_internet_gateway_attachment" "igw" {
+  internet_gateway_id = aws_internet_gateway.igw.id
+  vpc_id              = aws_vpc.main.id
 }
 
 # ──────────────────────────────────────────────
@@ -121,47 +127,51 @@ resource "aws_route_table_association" "public" {
 # SECURITY GROUP
 # ──────────────────────────────────────────────
 # A security group acts as a virtual firewall.
-# Ingress = inbound traffic rules.
-# Egress  = outbound traffic rules.
-# Least privilege: SSH is restricted to your IP
-# only — not open to the entire internet.
+# Per AWS provider v5.x docs, rules are defined
+# as separate resources using:
+#   aws_vpc_security_group_ingress_rule
+#   aws_vpc_security_group_egress_rule
+# instead of inline ingress/egress blocks.
 # ──────────────────────────────────────────────
+
+
 resource "aws_security_group" "lab_sg" {
   name        = "${var.project_name}-sg"
   description = "Allow SSH from my IP only and HTTP from anywhere"
   vpc_id      = aws_vpc.main.id
 
-  # SSH: only your IP can connect on port 22
-  ingress {
-    description = "SSH from my IP"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
-  }
-
-  # HTTP: anyone can reach port 80 (web traffic)
-  ingress {
-    description = "HTTP from anywhere"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Outbound: allow all traffic out (for updates, package installs, etc.)
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1" # -1 means all protocols
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = {
     Name    = "${var.project_name}-sg"
     Project = var.project_name
   }
+}
+
+# SSH: only your IP can connect on port 22
+resource "aws_vpc_security_group_ingress_rule" "ssh" {
+  security_group_id = aws_security_group.lab_sg.id
+  description       = "SSH from my IP"
+  from_port         = 22
+  to_port           = 22
+  ip_protocol       = "tcp"
+  cidr_ipv4         = var.my_ip
+}
+
+# HTTP: anyone can reach port 80 (web traffic)
+resource "aws_vpc_security_group_ingress_rule" "http" {
+  security_group_id = aws_security_group.lab_sg.id
+  description       = "HTTP from anywhere"
+  from_port         = 80
+  to_port           = 80
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+# Outbound: allow all traffic out (for updates, package installs, etc.)
+resource "aws_vpc_security_group_egress_rule" "all_outbound" {
+  security_group_id = aws_security_group.lab_sg.id
+  description       = "Allow all outbound traffic"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
 }
 
 # ──────────────────────────────────────────────

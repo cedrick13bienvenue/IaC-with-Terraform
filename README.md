@@ -31,11 +31,13 @@ This lab demonstrates how to use **Terraform** to define, deploy, and destroy fo
 
 ```
 IaC-with-Terraform/
-├── main.tf              # Core infrastructure + remote backend config
+├── backend/             # Stage 1 — bootstraps the remote backend (local state)
+│   ├── main.tf          # Creates S3 bucket (versioned, private) + DynamoDB lock table
+│   ├── variables.tf     # Region, bucket name, table name
+│   └── outputs.tf       # Prints bucket and table names after apply
+├── main.tf              # Stage 2 — core infrastructure using the remote backend
 ├── variables.tf         # Input variable definitions
 ├── outputs.tf           # Output values printed after apply
-├── setup-backend.sh     # Creates S3 bucket + DynamoDB table before terraform init
-├── destroy-backend.sh   # Deletes S3 bucket + DynamoDB table after terraform destroy
 ├── .gitignore           # Excludes state files and local Terraform dirs
 ├── README.md            # This file
 └── screenshoots/        # Evidence screenshots
@@ -85,18 +87,36 @@ State file path in S3: `iac-lab/terraform.tfstate`
 
 ## Usage
 
-### 0. Setup Backend (run once before anything else)
+This project uses a **two-stage approach** — the `backend/` folder is deployed first to create the S3 bucket and DynamoDB table, then the root config uses them as its remote backend.
+
+---
+
+### Stage 1 — Bootstrap the Remote Backend (run once)
 
 ```bash
-bash setup-backend.sh
+cd backend
+terraform init
+terraform apply
 ```
 
-Creates the S3 bucket (with versioning + public access blocked) and DynamoDB lock table. This solves the chicken-and-egg problem — Terraform needs the backend to exist before it can store state there.
+This creates:
+- S3 bucket (`cedrick-terraform-state-2026`) with versioning enabled and public access blocked
+- DynamoDB table (`terraform-lock`) for state locking
 
 ![S3 Bucket Versioning Enabled](screenshoots/01-s3-bucket-versioning-enabled.png)
 ![DynamoDB Lock Table](screenshoots/02-dynamodb-lock-table.png)
 
-### 1. Initialize
+> The `backend/` config stores its own state **locally** — this is intentional. You cannot use a remote backend to create the remote backend itself.
+
+---
+
+### Stage 2 — Deploy the Main Infrastructure
+
+```bash
+cd ..
+```
+
+#### 1. Initialize
 
 ```bash
 terraform init
@@ -106,7 +126,7 @@ Downloads the AWS provider and connects to the S3 remote backend.
 
 ![Terraform Init](screenshoots/03-terraform-init.png)
 
-### 2. Format & Validate
+#### 2. Format & Validate
 
 ```bash
 terraform fmt
@@ -118,7 +138,7 @@ terraform validate
 
 ![Terraform Validate](screenshoots/09-terraform-validate.png)
 
-### 3. Plan (dry run)
+#### 3. Plan (dry run)
 
 ```bash
 terraform plan -var="my_ip=YOUR.IP.HERE/32"
@@ -128,7 +148,7 @@ Previews all resources that will be created. No changes are made.
 
 ![Terraform Plan](screenshoots/04-terraform-plan.png)
 
-### 4. Apply
+#### 4. Apply
 
 ```bash
 terraform apply -var="my_ip=YOUR.IP.HERE/32"
@@ -140,23 +160,22 @@ Creates all infrastructure. Type `yes` to confirm.
 ![EC2 Instance Running](screenshoots/06-ec2-instance-running.png)
 ![S3 State File](screenshoots/07-s3-state-file.png)
 
-### 5. Destroy
+---
+
+### Teardown — Destroy Everything
+
+> Order matters — destroy the main infra before the backend, or Terraform loses its state file.
 
 ```bash
+# 1. Destroy main infrastructure
 terraform destroy -var="my_ip=YOUR.IP.HERE/32"
-```
 
-Tears down all created resources. Type `yes` to confirm.
+# 2. Destroy the backend resources
+cd backend
+terraform destroy
+```
 
 ![Terraform Destroy Complete](screenshoots/08-terraform-destroy-complete.png)
-
-### 6. Destroy Backend (run after terraform destroy)
-
-```bash
-bash destroy-backend.sh
-```
-
-Empties and deletes the S3 bucket and DynamoDB table. Prompts for confirmation before deleting anything. Ensures no AWS resources are left running after the lab, for cost optimization.
 
 ## Security Considerations
 
