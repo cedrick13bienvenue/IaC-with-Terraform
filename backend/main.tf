@@ -35,8 +35,10 @@ provider "aws" {
 # ──────────────────────────────────────────────
 # S3 BUCKET — stores the Terraform state file
 # ──────────────────────────────────────────────
+
 resource "aws_s3_bucket" "state" {
-  bucket = var.bucket_name
+  bucket        = var.bucket_name
+  force_destroy = true # empties all versions before deleting on terraform destroy
 
   tags = {
     Name    = var.bucket_name
@@ -71,6 +73,7 @@ resource "aws_s3_bucket_public_access_block" "state" {
 # Prevents two concurrent terraform apply runs
 # from corrupting the state file. LockID is the
 # exact key name required by Terraform's S3 backend.
+
 resource "aws_dynamodb_table" "lock" {
   name         = var.dynamodb_table
   billing_mode = "PAY_PER_REQUEST"
